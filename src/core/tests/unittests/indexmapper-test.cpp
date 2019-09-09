@@ -37,30 +37,77 @@
 
 namespace inviwo {
 
-TEST(indexmapper, equivalence2D) {
-    util::Vector_2<2, size_t> dimensions1(16, 16);
+TEST(indexmapper, indexEquivalence2D) {
+    util::VectorN<2, size_t> dimensions1{16, 16};
+    auto indexMapper1 = util::makeIndexMapperN(dimensions1);
+    const auto index1 = indexMapper1({9, 8});
+
     Vector<2, size_t> dimensions2(16, 16);
-
-    auto indexMapper1 = util::makeIndexMapper2(dimensions1);
-    auto index1 = indexMapper1(9, 8);
-
     auto indexMapper2 = util::IndexMapper<2, size_t>(dimensions2);
-    auto index2 = indexMapper2(9, 8);
+    const auto index2 = indexMapper2(9, 8);
 
     EXPECT_EQ(index1, index2);
 }
 
-TEST(indexmapper, equivalence3D) {
-    util::Vector_2<3, size_t> dimensions1(16, 16, 16);
+TEST(indexmapper, indexEquivalence3D) {
+    util::VectorN<3, size_t> dimensions1{16, 16, 16};
+    auto indexMapper1 = util::makeIndexMapperN(dimensions1);
+    const auto index1 = indexMapper1({9, 8, 7});
+
     Vector<3, size_t> dimensions2(16, 16, 16);
-
-    auto indexMapper1 = util::makeIndexMapper2(dimensions1);
-    auto index1 = indexMapper1(9, 8, 7);
-
     auto indexMapper2 = util::IndexMapper<3, size_t>(dimensions2);
-    auto index2 = indexMapper2(9, 8, 7);
+    const auto index2 = indexMapper2(9, 8, 7);
 
     EXPECT_EQ(index1, index2);
+}
+
+TEST(indexmapper, posEquivalence2D) {
+    util::VectorN<2, size_t> dimensions1{16, 16};
+    auto indexMapper1 = util::makeIndexMapperN(dimensions1);
+    const auto pos1 = indexMapper1(25);
+
+    Vector<2, size_t> dimensions2(16, 16);
+    auto indexMapper2 = util::IndexMapper<2, size_t>(dimensions2);
+    const auto pos2 = indexMapper2(25);
+
+    EXPECT_EQ(pos1[0], pos2[0]);
+    EXPECT_EQ(pos1[1], pos2[1]);
+}
+
+TEST(indexmapper, posEquivalence3D) {
+    util::VectorN<3, size_t> dimensions1{16, 16, 16};
+    auto indexMapper1 = util::makeIndexMapperN(dimensions1);
+    const auto pos1 = indexMapper1(255);
+
+    Vector<3, size_t> dimensions2(16, 16, 16);
+    auto indexMapper2 = util::IndexMapper<3, size_t>(dimensions2);
+    const auto pos2 = indexMapper2(255);
+
+    EXPECT_EQ(pos1[0], pos2[0]);
+    EXPECT_EQ(pos1[1], pos2[1]);
+    EXPECT_EQ(pos1[2], pos2[2]);
+}
+
+TEST(indexmapper, posEquivalence4D) {
+    util::VectorN<4, size_t> dimensions1{16, 16, 16, 16};
+    auto indexMapper1 = util::makeIndexMapperN(dimensions1);
+    const auto pos1 = indexMapper1(255);
+
+    auto map4D = [](const Vector<4, size_t>& dimensions, const size_t index) -> auto {
+        return Vector<4, size_t>{
+            index % dimensions.x, (index / dimensions.x) % dimensions.y,
+            (index / (dimensions.x * dimensions.y)) % dimensions.z,
+            (index / (dimensions.x * dimensions.y * dimensions.z)) % dimensions.w};
+    };
+
+    Vector<4, size_t> dimensions2(16, 16, 16, 16);
+    
+    const auto pos2 = map4D(dimensions2, 255);
+
+    EXPECT_EQ(pos1[0], pos2[0]);
+    EXPECT_EQ(pos1[1], pos2[1]);
+    EXPECT_EQ(pos1[2], pos2[2]);
+    EXPECT_EQ(pos1[3], pos2[3]);
 }
 
 }  // namespace inviwo

@@ -27,8 +27,8 @@
  *
  *********************************************************************************/
 
-#ifndef IVW_INDEXMAPPER2_H
-#define IVW_INDEXMAPPER2_H
+#ifndef IVW_IndexMapperN2_H
+#define IVW_IndexMapperN2_H
 
 #include <array>
 #include <iostream>
@@ -39,31 +39,55 @@
 namespace inviwo {
 namespace util {
 template <size_t N, typename T>
-struct Vector_2 {
-    template <typename... Args>
-    Vector_2(Args&&... args) {
-        static_assert(sizeof...(args) == N, "Incorrect number of initializer arguments.");
-        //static_assert(std::is_same<T, std::common_type_t<Args...>>::value,
-        //              "Types of T and args are not the same.");
-
+struct VectorN {
+    constexpr VectorN() = default;
+    constexpr VectorN(std::initializer_list<T> l);
+    constexpr VectorN(std::array<T, N> a);
+    constexpr VectorN(const VectorN<N + 1, T>& vec) {
         data_ = std::array<T, N>{};
-        size_t i{0};
-        ((data_[i++] = static_cast<T>(args)), ...);
-    }
+        std::copy(vec.data().begin(), vec.data().begin() + N, data_.begin());
+    }                                                      // Copy and reduction constructor
+    constexpr VectorN(const VectorN<N - 1, T>& vec, T v);  // Expansion constructor
+
+    ~VectorN() = default;
 
     const auto& data() const { return data_; }
-    const auto size() const { return data_.size(); }
-    T operator[](const size_t index) const { return data_[index]; }
+    constexpr auto size() const { return data_.size(); }
+    constexpr T operator[](const size_t index) const { return data_[index]; }
+    constexpr T prod() const {
+        T prod{1};
+        for (size_t i{0}; i < N; ++i) {
+            prod *= data_[i];
+        }
+        return prod;
+    }
+
+	void set(size_t i, T t) { data_[i] = t; }
 
 private:
     std::array<T, N> data_;
 };
 
+template <size_t N, typename T>
+constexpr VectorN<N, T>::VectorN(std::initializer_list<T> l) {
+    std::copy(l.begin(), l.end(), data_.begin());
+}
+
+template <size_t N, typename T>
+constexpr VectorN<N, T>::VectorN(std::array<T, N> a) : data_(std::move(a)) {}
+
+// Expansion constructor
+template <size_t N, typename T>
+constexpr VectorN<N, T>::VectorN(const VectorN<N - 1, T>& vec, T v) : data_({}) {
+    std::copy(vec.data().begin(), vec.data().end(), data_.begin());
+    data_[N - 1] = v;
+}
+
 template <size_t N, typename IndexType>
-struct IndexMapper2 {
-    constexpr IndexMapper2(const Vector_2<N, IndexType>& dim) : dimensions_(dim) {
-        // Generate coefficients
-        for (size_t i{0}; i < N; ++i) {
+struct IndexMapperN {
+    constexpr IndexMapperN() = delete;
+    constexpr IndexMapperN(const VectorN<N, IndexType>& dim) : dimensions_(dim) {
+        for (size_t i{0}; i < N; ++i) {  // Generate coefficients
             IndexType coeff{1};
             for (size_t j{0}; j < N - i - 1; ++j) {
                 coeff *= dimensions_[j];
@@ -71,37 +95,69 @@ struct IndexMapper2 {
             coeffArray_[i] = coeff;
         }
 
-        // Reverse so we can simply compute the inner product of the coefficient vector and the
-        // position vector.
-        std::reverse(std::begin(coeffArray_), std::end(coeffArray_));
+        std::reverse(std::begin(coeffArray_),
+                     std::end(coeffArray_));  // Reverse so we can simply compute the inner product
+                                              // of the coefficient array and the position array.
     };
 
-    template <typename... IndexTypePack>
-    constexpr auto operator()(IndexTypePack... coords) const noexcept {
-        Vector_2<sizeof...(coords), IndexType> pos(coords...);
-        return IndexMapper2::operator()(pos);
-    }
-
-    constexpr IndexType operator()(const Vector_2<N, IndexType>& pos) const noexcept {
+    constexpr IndexType operator()(const VectorN<N, IndexType>& pos) const noexcept {
         const auto& posArray = pos.data();
         return std::inner_product(std::cbegin(coeffArray_), std::cend(coeffArray_),
                                   std::cbegin(posArray), 0);
     }
 
+    constexpr VectorN<N, IndexType> operator()(IndexType i);
+
 private:
-    Vector_2<N, IndexType> dimensions_;
+    VectorN<N, IndexType> dimensions_;
     std::array<IndexType, N> coeffArray_;
 };
 
-using IndexMapper2_2D = IndexMapper2<2, size_t>;
-using IndexMapper2_3D = IndexMapper2<3, size_t>;
+template <size_t N, typename IndexType>
+auto makeIndexMapperN(const VectorN<N, IndexType>& dim) {
+    return IndexMapperN<N, IndexType>(dim);
+}
+
+namespace detail {
+// Needed to put this here because otherwise the template arguments were conflicting
+ template <size_t N, typename IndexType>
+ constexpr VectorN<N, IndexType> getPosFromIndex(IndexType i, const VectorN<N, IndexType>& d) {
+    if constexpr (N <= 1)
+        return VectorN<1, IndexType>{i};
+    else {
+        constexpr auto L2 = N - 1;
+        return VectorN<N, IndexType>(
+            getPosFromIndex<L2, IndexType>(i % d[L2], VectorN<L2, IndexType>(d)),
+            i / d[L2]);
+    }
+}
 
 template <size_t N, typename IndexType>
-auto makeIndexMapper2(const Vector_2<N, IndexType>& dim) {
-    return IndexMapper2<N, IndexType>(dim);
+constexpr VectorN<N, IndexType> getPosFromIndex2(IndexType i, const VectorN<N, IndexType>& d) {
+    VectorN<N, IndexType> result;
+    IndexType prod{1};
+    constexpr auto L2 = N - 1;
+
+    for (size_t j{0}; j < N; ++j) {
+        result.set(j,(i / prod) % d[L2]);
+        prod *= d[L2 - 1];
+    }
+
+	return result;
 }
+
+}  // namespace detail
+
+template <size_t N, typename IndexType>
+constexpr VectorN<N, IndexType> IndexMapperN<N, IndexType>::operator()(const IndexType i) {
+    return detail::getPosFromIndex2<N, IndexType>(i, dimensions_);
+}
+
+using IndexMapper2DN = IndexMapperN<2, size_t>;
+using IndexMapper3DN = IndexMapperN<3, size_t>;
+using IndexMapper4DN = IndexMapperN<4, size_t>;
 
 }  // namespace util
 }  // namespace inviwo
 
-#endif  // IVW_INDEXMAPPER2_H
+#endif  // IVW_IndexMapperN2_H
